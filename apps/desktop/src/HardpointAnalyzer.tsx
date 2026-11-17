@@ -77,6 +77,8 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
     let normalizer = 1;
     const ray = new THREE.Raycaster();
     let dragging = false, moved = false, startX = 0, startY = 0;
+    const visibleMarkers = new Map<string, THREE.Mesh>();
+    const sharedMarkerGeometry = new THREE.SphereGeometry(0.024, 10, 8);
     let yaw = 0.7, pitch = 0.35, distance = 6.4;
     function cameraPose() {
       camera.position.set(distance * Math.sin(yaw) * Math.cos(pitch), distance * Math.sin(pitch), distance * Math.cos(yaw) * Math.cos(pitch));
@@ -101,8 +103,18 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
         if (!hits.length) continue;
         options.push({ id, kind, label, position: vertexFromWorld(hits[0].point), approved: false, method: "bounding-axis-raycast" });
       }
-      setPoints(options);
-      setStatus(options.length ? `Proposed ${options.length} surface points. Labels are guesses. Review each on the model.` : "No surface intersections found. Check orientation and model geometry.");
+      void invoke<Point[]>("load_model_hardpoints", {
+        request: { projectPath, modelFolder: folder, modelPath: selected }
+      }).then((saved) => {
+        if (disposed) return;
+        if (saved.length) {
+          setPoints(saved);
+          setStatus(`Loaded ${saved.length} previously reviewed points. Existing approvals preserved.`);
+        } else {
+          setPoints(options);
+          setStatus(options.length ? `Proposed ${options.length} surface points. Labels are guesses. Review each on the model.` : "No surface intersections found. Check orientation and model geometry.");
+        }
+      }).catch((error) => setStatus("Cannot read prior review; refusing to overwrite: " + String(error)));
     }
     void invoke<number[]>("load_ship_model_preview", {
       request: { projectPath, modelFolder: folder, modelPath: selected }
@@ -156,13 +168,24 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
     function draw() {
       if (disposed) return;
       cameraPose();
-      markers.clear();
       if (gltfRoot) {
+        const current = new Set(pointsRef.current.map(p => p.id));
+        for (const [id, mesh] of visibleMarkers) {
+          if (!current.has(id)) {
+            markers.remove(mesh);
+            (mesh.material as THREE.Material).dispose();
+            visibleMarkers.delete(id);
+          }
+        }
         for (const point of pointsRef.current) {
-          const spot = new THREE.Mesh(new THREE.SphereGeometry(0.024, 10, 8),
-            new THREE.MeshBasicMaterial({ color:point.approved ? 0x50cf88 : point.id === activeRef.current ? 0xffd977 : 0x65b5ff }));
+          let spot = visibleMarkers.get(point.id);
+          if (!spot) {
+            spot = new THREE.Mesh(sharedMarkerGeometry, new THREE.MeshBasicMaterial({color:0x65b5ff}));
+            markers.add(spot);
+            visibleMarkers.set(point.id, spot);
+          }
+          (spot.material as THREE.MeshBasicMaterial).color.setHex(point.approved ? 0x50cf88 : point.id === activeRef.current ? 0xffd977 : 0x65b5ff);
           spot.position.copy(markerPosition(point));
-          markers.add(spot);
         }
       }
       renderer.render(scene,camera);
