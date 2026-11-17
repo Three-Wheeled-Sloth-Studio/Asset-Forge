@@ -11,6 +11,11 @@ type Catalog = { models: Model[] };
 type Kind = "enginePort" | "maneuverThruster" | "navigationLight" | "weaponMountHint" | "cameraInspectAnchor" | "selectionAnchor" | "articulationCandidate";
 type Point = { id: string; kind: Kind; label: string; position: [number, number, number]; approved: boolean; method: string };
 type ViewPreset = "stern" | "bow" | "port" | "starboard" | "top";
+type StoredReview = { found: boolean; manifestPath: string; updatedAt: string | null; savedOrientation: ModelTransform | null; points: Point[] };
+function sameOrientation(a: ModelTransform | null, b: ModelTransform): boolean {
+  return a !== null && (["yawDegrees", "pitchDegrees", "rollDegrees", "scale"] as const)
+    .every((key) => Math.abs(a[key] - b[key]) < 0.0001);
+}
 
 const types: Kind[] = ["enginePort", "navigationLight", "maneuverThruster", "weaponMountHint", "cameraInspectAnchor", "selectionAnchor", "articulationCandidate"];
 
@@ -32,6 +37,7 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
   const [status, setStatus] = useState("Load models, then review proposals from the saved model orientation.");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [storedReview, setStoredReview] = useState<StoredReview | null>(null);
   const viewRef = useRef<HTMLDivElement | null>(null);
   const pointsRef = useRef(points);
   const activeRef = useRef(activeId);
@@ -49,6 +55,7 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
   async function load() {
     setBusy(true);
     setReady(false);
+    setStoredReview(null);
     setStatus("Loading model catalog...");
     try {
       const result = await invoke<Catalog>("list_ship_model_orientations", {
@@ -68,6 +75,7 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
     setSelected("");
     setPoints([]);
     setReady(false);
+    setStoredReview(null);
   }, [projectPath]);
 
   useEffect(() => {
@@ -191,13 +199,23 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
         gltfRoot = root;
         normalizer.add(root);
         root.updateMatrixWorld(true);
-        const initialBounds = new THREE.Box3().setFromObject(root);
-        const center = initialBounds.getCenter(new THREE.Vector3());
-        const dimensions = initialBounds.getSize(new THREE.Vector3());
+        // Compute the normalization in the source coordinate frame, before
+        // applying the user's approved orientation to the outer group.
+        oriented.rotation.set(0, 0, 0);
+        oriented.scale.setScalar(1);
+        scene.updateMatrixWorld(true);
+        const sourceBounds = new THREE.Box3().setFromObject(root);
+        const center = sourceBounds.getCenter(new THREE.Vector3());
+        const dimensions = sourceBounds.getSize(new THREE.Vector3());
         const scale = 3.1 / Math.max(0.001, dimensions.x, dimensions.y, dimensions.z);
-        // Normalization wrapper is separate; avoids double-transforming the model.
         normalizer.scale.setScalar(scale);
         normalizer.position.copy(center.multiplyScalar(-scale));
+        oriented.rotation.set(
+          THREE.MathUtils.degToRad(transform.pitchDegrees),
+          THREE.MathUtils.degToRad(transform.yawDegrees),
+          THREE.MathUtils.degToRad(transform.rollDegrees), "XYZ"
+        );
+        oriented.scale.setScalar(Math.max(0.05, transform.scale || 1));
         scene.updateMatrixWorld(true);
         candidateSuggestions = propose(oriented);
         readyGeometry = true;
