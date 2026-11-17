@@ -2566,6 +2566,85 @@ fn run_trellis_batch_conversion(
     })
 }
 
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HardpointSaveRequest {
+    project_path: String,
+    model_folder: String,
+    model_path: String,
+    hardpoints: Vec<HardpointDraft>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HardpointDraft {
+    id: String,
+    kind: String,
+    label: String,
+    position: [f64; 3],
+    approved: bool,
+    method: String,
+}
+
+#[tauri::command]
+fn save_model_hardpoints(request: HardpointSaveRequest) -> Result<String, String> {
+    let project_root = local_folder_for_project(&PathBuf::from(&request.project_path))?;
+    let model_folder = resolve_project_folder(&request.project_path, &request.model_folder)?;
+    // Existing model path must resolve inside the selected project.
+    let source = model_path_from_res_path(&project_root, &model_folder, &request.model_path)?;
+    if !source.is_file() {
+        return Err("Selected GLB is missing".to_string());
+    }
+    if request.hardpoints.len() > 32 {
+        return Err("At most 32 proposed hardpoints are allowed per model".to_string());
+    }
+    let mut seen = std::collections::HashSet::new();
+    for point in &request.hardpoints {
+        if point.id.is_empty() || !point.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') ||
+           !seen.insert(point.id.clone()) {
+            return Err("Hardpoint IDs must be nonempty, safe and unique".to_string());
+        }
+        if !["enginePort", "maneuverThruster", "navigationLight", "weaponMountHint",
+             "cameraInspectAnchor", "selectionAnchor", "articulationCandidate"].contains(&point.kind.as_str()) {
+            return Err(format!("Unknown hardpoint type: {}", point.kind));
+        }
+        if point.label.len() > 120 || !point.position.iter().all(|n| n.is_finite() && n.abs() < 1.0e6) {
+            return Err("Invalid hardpoint label or position".to_string());
+        }
+    }
+    ensure_asset_forge_refs(&project_root)?;
+    let output = project_root.join("refs").join("assetForge").join("model-hardpoints.manifest.json");
+    let mut document: serde_json::Value = if output.exists() {
+        serde_json::from_slice(&fs::read(&output).map_err(|e| e.to_string())?)
+            .map_err(|e| format!("Cannot read existing hardpoint manifest: {e}"))?
+    } else {
+        serde_json::json!({"schemaVersion":"0.1.0","coordinateSpace":"glTF source-local (+Y up); apply model orientation separately","models":{}})
+    };
+    let models = document.get_mut("models").and_then(|v| v.as_object_mut())
+        .ok_or_else(|| "Existing hardpoint manifest is missing object 'models'".to_string())?;
+    models.insert(request.model_path.clone(), serde_json::json!({
+        "sourceModelPath": request.model_path,
+        "updatedAt": now_isoish(),
+        "proposalStatus": "reviewed",
+        "hardpoints": request.hardpoints,
+        "notes": "Geometry suggestions only; approved flag records human acceptance. Original GLB untouched."
+    }));
+    let pretty = serde_json::to_string_pretty(&document).map_err(|e| e.to_string())?;
+    let temp = output.with_extension("json.tmp");
+    fs::write(&temp, format!("{pretty}\n")).map_err(|e| e.to_string())?;
+    fs::rename(&temp, &output).map_err(|e| e.to_string())?;
+    let audit = HandoffAuditEntry {
+        timestamp: now_isoish(),
+        tool: "model-hardpoints".to_string(),
+        action: "saved-review".to_string(),
+        target: request.model_path,
+        summary: "Saved proposed and approved source-local hardpoint positions; source GLB unchanged.".to_string(),
+    };
+    append_project_audit_log(&project_root, &audit)?;
+    Ok(output.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 fn close_app(app: tauri::AppHandle) {
     app.exit(0);
@@ -2584,6 +2663,7 @@ pub fn run() {
             sync_external_project,
             list_ship_model_orientations,
             save_ship_model_orientation,
+            save_model_hardpoints,
             load_ship_model_preview,
             load_absolute_model_preview,
             scan_image_assets,
