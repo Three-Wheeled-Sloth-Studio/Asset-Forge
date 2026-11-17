@@ -443,8 +443,11 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
     </p>
     <table><thead><tr><th>Approve</th><th>Candidate</th><th>Type</th><th>Source-local XYZ</th></tr></thead><tbody>
       {points.map((point) => <tr key={point.id} style={{ background: point.id === activeId ? "rgba(120,160,190,.15)" : undefined }}>
-        <td><input aria-label={`Approve ${point.label}`} type="checkbox" checked={point.approved} onChange={(e) =>
-          setPoints((items) => items.map((item) => item.id === point.id ? { ...item, approved: e.target.checked } : item)); setStatus("Approval changed in editor only; use Save Reviewed Hardpoints to persist.");} /></td>
+        <td><input aria-label={`Approve ${point.label}`} type="checkbox" checked={point.approved} onChange={(e) => {
+          const checked = e.target.checked;
+          setPoints((items) => items.map((item) => item.id === point.id ? { ...item, approved: checked } : item));
+          setStatus("Approval changed in editor only; use Save Reviewed Hardpoints to persist.");
+        }} /></td>
         <td><button type="button" onClick={() => setActiveId(point.id)} aria-pressed={activeId === point.id}>
           <span aria-hidden="true" style={{display:"inline-block",width:12,height:12,borderRadius:"50%",background:markerCss(point.id),marginRight:8}} />
           {activeId === point.id ? "Selected: " : "Select: "}{point.label}
