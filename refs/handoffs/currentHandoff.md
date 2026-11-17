@@ -1,5 +1,13 @@
 # Current Handoff
 
+## Non-fast-forward hardpoint publication recovery (2026-11-17)
+- User's Asset Forge Push to Linked Repository for Imperatus-Assets main was rejected (fetch first). No remote overwrite occurred; local hardpoint commit remains.
+- Added in-app **Integrate Remote Main** recovery, only shown after a push failure containing non-fast-forward/fetch-first/rejected-main indicators. It requires a second explicit checkbox and retains the separate Push confirmation.
+- Rust handler checks local branch is main and tracked tree is clean, fetches origin/main, and runs a normal merge when remote is ahead. No force push, reset, stash or automatic remote publication. A conflicting merge is automatically aborted when possible and surfaced as a clear error; local commits are preserved.
+- Validation outstanding: Windows Tauri relaunch, typecheck and actual linked-repo divergence workflow. Do not claim user's failed push is already recovered. After pulling Asset Forge main, reopen the desktop app and use the recovery control, then review and approve Push separately.
+- Future improvement: display ahead/behind counts before the initial Push so users can reconcile proactively, and add a guided conflict resolver if truly overlapping changes occur.
+
+
 ## Fleet publication UI and TWS-Video fleet bridge (2026-11-17)
 - User reviewed THREE ships in Asset Forge. The previous TWS-Video importer reported only Gilded Caravan Guard because it intentionally filtered to the current song's ship. This was a tooling limitation, not evidence that the other reviews were lost.
 - Asset Forge hardpoints now contains **Linked repository publication** at the bottom of the Model Hardpoints screen: Review Git Status -> Commit Hardpoint Manifest -> separately confirmed Push to Linked Repository. It reviews the complete `refs/assetForge/model-hardpoints.manifest.json` (all ships), shows linked repo, branch, model and approved-model count; commit is scoped to just the manifest via `git commit --only`. Push reuses the app's existing linked-project Git sync and requires explicit checkbox approval. Warns push can include *other unpushed branch commits*. Saving hardpoints is not a commit or push. In-memory edits invalidate prior push confirmation. On error, display Git failure.
