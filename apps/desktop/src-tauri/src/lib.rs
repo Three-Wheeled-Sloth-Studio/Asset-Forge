@@ -2641,16 +2641,19 @@ fn save_model_hardpoints(request: HardpointSaveRequest) -> Result<String, String
     let models = document.get_mut("models").and_then(|v| v.as_object_mut())
         .ok_or_else(|| "Existing hardpoint manifest is missing object 'models'".to_string())?;
     models.insert(request.model_path.clone(), serde_json::json!({
-        "sourceModelPath": request.model_path,
+        "sourceModelPath": request.model_path.clone(),
         "updatedAt": now_isoish(),
         "proposalStatus": "reviewed",
         "hardpoints": request.hardpoints,
         "notes": "Geometry suggestions only; approved flag records human acceptance. Original GLB untouched."
     }));
     let pretty = serde_json::to_string_pretty(&document).map_err(|e| e.to_string())?;
-    let temp = output.with_extension("json.tmp");
-    fs::write(&temp, format!("{pretty}\n")).map_err(|e| e.to_string())?;
-    fs::rename(&temp, &output).map_err(|e| e.to_string())?;
+    // Keep last reviewed manifest available for recovery on Windows.
+    if output.exists() {
+        fs::copy(&output, output.with_extension("json.bak"))
+            .map_err(|e| format!("Cannot back up prior hardpoint review: {e}"))?;
+    }
+    fs::write(&output, format!("{pretty}\\n")).map_err(|e| e.to_string())?;
     let audit = HandoffAuditEntry {
         timestamp: now_isoish(),
         tool: "model-hardpoints".to_string(),
