@@ -2785,6 +2785,47 @@ fn commit_hardpoint_repo(request: HardpointRepoAction) -> Result<ProjectSyncResu
 }
 
 #[tauri::command]
+fn integrate_hardpoint_remote(request: HardpointRepoAction) -> Result<ProjectSyncResult, String> {
+    let (root, _) = hardpoint_linked_repo(&request.project_path)?;
+    // This action is intentionally limited to the main branch and requires explicit
+    // confirmation in Asset Forge. It never force-pushes, resets, or stashes user data.
+    let branch = run_git_command(&root, &["symbolic-ref", "--quiet", "--short", "HEAD"])?;
+    if branch.output.trim() != "main" {
+        return Err(format!("Integrate Remote Main requires local main, found {}.", branch.output.trim()));
+    }
+    let status = run_git_command(&root, &["status", "--porcelain", "--untracked-files=no"])?;
+    if !status.output.starts_with("Command completed without output.") {
+        return Err("Local tracked files have uncommitted changes. Save or commit them in Asset Forge before integrating remote main.".to_string());
+    }
+    run_git_command(&root, &["fetch", "origin", "main"])?;
+    let counts = run_git_command(&root, &["rev-list", "--left-right", "--count", "HEAD...origin/main"])?;
+    let parts: Vec<&str> = counts.output.split_whitespace().collect();
+    if parts.len() != 2 {
+        return Err(format!("Could not determine local/remote divergence: {}", counts.output));
+    }
+    let behind: usize = parts[1].parse().map_err(|_| "Invalid remote divergence count".to_string())?;
+    if behind == 0 {
+        return Ok(ProjectSyncResult {
+            command: "git fetch origin main".to_string(),
+            output: "Local main already includes remote main. You may retry the separately approved Push.".to_string(),
+        });
+    }
+    match run_git_command(&root, &["merge", "--no-edit", "origin/main"]) {
+        Ok(merged) => Ok(ProjectSyncResult {
+            command: merged.command,
+            output: format!("Remote main integrated into local main. Review the merge, then explicitly approve Push again.\n{}", merged.output),
+        }),
+        Err(error) => {
+            let abort = run_git_command(&root, &["merge", "--abort"]);
+            if let Err(abort_error) = abort {
+                return Err(format!("Merge encountered conflicts AND automatic merge abort failed. Do not retry Push. Original error: {}. Recovery error: {}", error, abort_error));
+            }
+            Err(format!("Remote changes conflict with local commits. The attempted merge was aborted; existing commits are preserved. Review the overlap in the linked checkout before retrying. Details: {}", error))
+        }
+    }
+}
+
+#[tauri::command]
 fn close_app(app: tauri::AppHandle) {
     app.exit(0);
 }
@@ -2806,6 +2847,7 @@ pub fn run() {
             load_model_hardpoints,
             review_hardpoint_repo,
             commit_hardpoint_repo,
+            integrate_hardpoint_remote,
             load_ship_model_preview,
             load_absolute_model_preview,
             scan_image_assets,
