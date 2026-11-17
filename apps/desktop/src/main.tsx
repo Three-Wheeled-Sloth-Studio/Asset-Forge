@@ -2632,7 +2632,7 @@ function ImageAssetTable({ assets }: { assets: ImageAssetEntry[] }) {
 }
 
 function ModelOptimizationTool({ project }: { project: ProjectSummary }) {
-  const [sourceFolder, setSourceFolder] = useState("assets\\models\\small-craft");
+  const [sourceFolder, setSourceFolder] = useState(() => getModelFolder(project.path));
   const [stagingFolder, setStagingFolder] = useState("tmp\\asset-forge-optimized-models");
   const [manifestPath, setManifestPath] = useState(
     "refs\\assetForge\\model-optimization.manifest.json"
@@ -2647,6 +2647,12 @@ function ModelOptimizationTool({ project }: { project: ProjectSummary }) {
   const [reviewPair, setReviewPair] = useState<ModelOptimizeEntry | null>(null);
   const [status, setStatus] = useState("");
   const [isBusy, setIsBusy] = useState(false);
+
+  useEffect(() => {
+    setSourceFolder(getModelFolder(project.path));
+    setScan(null);
+    setResult(null);
+  }, [project.path]);
 
   const totalBytes = scan?.assets.reduce((sum, asset) => sum + asset.fileSizeBytes, 0) ?? 0;
   const opportunityCount =
@@ -2711,7 +2717,7 @@ function ModelOptimizationTool({ project }: { project: ProjectSummary }) {
           label="Source model folder"
           value={sourceFolder}
           kind="folder"
-          onChange={setSourceFolder}
+          onChange={(value) => { setSourceFolder(value); setModelFolderPreference(project.path, value); setScan(null); setResult(null); }}
         />
         <PathField
           label="Staging folder"
