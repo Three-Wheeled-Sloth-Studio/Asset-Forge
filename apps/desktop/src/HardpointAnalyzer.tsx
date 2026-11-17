@@ -490,7 +490,7 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
     </p>
     <div className="image-config-grid">
       <label>Model folder <input value={folder} onChange={(e) => onFolderChange(e.target.value)} /></label>
-      <label>Model <select value={selected} onChange={(e) => { setSelected(e.target.value); setPoints([]); setStoredReview(null); setRepoStatus(null); setCommittedThisSession(false); setPushApproved(false); setReady(false); }}>
+      <label>Model <select value={selected} onChange={(e) => { setSelected(e.target.value); setPoints([]); setStoredReview(null); setRepoStatus(null); setPushApproved(false); setReady(false); }}>
         {models.map((model) => <option key={model.modelPath} value={model.modelPath}>{model.fileName}</option>)}
       </select></label>
     </div>
