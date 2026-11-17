@@ -2704,6 +2704,86 @@ fn save_model_hardpoints(request: HardpointSaveRequest) -> Result<String, String
     Ok(output.to_string_lossy().to_string())
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HardpointRepoAction {
+    project_path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HardpointRepoStatus {
+    repository: String,
+    manifest_path: String,
+    model_count: usize,
+    approved_model_count: usize,
+    change_status: String,
+    branch_status: String,
+}
+
+fn hardpoint_linked_repo(project_path: &str) -> Result<(PathBuf, String), String> {
+    let root = local_folder_for_project(&PathBuf::from(project_path))?;
+    if !root.join(".git").exists() {
+        return Err("Linked project directory is not a Git checkout".to_string());
+    }
+    let project = read_project(&PathBuf::from(project_path))?;
+    if project.github_repository_url.trim().is_empty() {
+        return Err("Configure the linked GitHub repository URL before publishing".to_string());
+    }
+    Ok((root, project.github_repository_url))
+}
+
+fn hardpoint_relative_path() -> &'static str {
+    "refs/assetForge/model-hardpoints.manifest.json"
+}
+
+#[tauri::command]
+fn review_hardpoint_repo(request: HardpointRepoAction) -> Result<HardpointRepoStatus, String> {
+    let (root, url) = hardpoint_linked_repo(&request.project_path)?;
+    let path = root.join(hardpoint_relative_path());
+    if !path.is_file() {
+        return Err("No saved hardpoint manifest. Save reviewed hardpoints first.".to_string());
+    }
+    let document: serde_json::Value = serde_json::from_slice(
+        &fs::read(&path).map_err(|e| e.to_string())?)
+        .map_err(|e| format!("Hardpoint manifest is invalid: {e}"))?;
+    let models = document.get("models").and_then(|m| m.as_object())
+        .ok_or_else(|| "Hardpoint manifest is missing models".to_string())?;
+    let approved = models.values().filter(|model| {
+        model.get("hardpoints").and_then(|p| p.as_array()).map_or(false, |points| {
+            points.iter().any(|point| point.get("approved").and_then(|x| x.as_bool()) == Some(true))
+        })
+    }).count();
+    let changes = run_git_command(&root,
+        &["status", "--short", "--", hardpoint_relative_path()])?;
+    let branch = run_git_command(&root, &["status", "--short", "--branch"])?;
+    Ok(HardpointRepoStatus {
+        repository: url,
+        manifest_path: path.to_string_lossy().to_string(),
+        model_count: models.len(),
+        approved_model_count: approved,
+        change_status: changes.output,
+        branch_status: branch.output,
+    })
+}
+
+#[tauri::command]
+fn commit_hardpoint_repo(request: HardpointRepoAction) -> Result<ProjectSyncResult, String> {
+    let status = review_hardpoint_repo(HardpointRepoAction {
+        project_path: request.project_path.clone(),
+    })?;
+    if status.approved_model_count == 0 {
+        return Err("No approved ship reviews to commit".to_string());
+    }
+    let (root, _) = hardpoint_linked_repo(&request.project_path)?;
+    // Stage and commit exactly the hardpoint manifest. Existing unrelated
+    // staged work is left untouched, not silently added to this commit.
+    run_git_command(&root, &["add", "--", hardpoint_relative_path()])?;
+    run_git_command(&root,
+        &["commit", "--only", "-m", "Record reviewed model hardpoints from Asset Forge",
+          "--", hardpoint_relative_path()])
+}
+
 #[tauri::command]
 fn close_app(app: tauri::AppHandle) {
     app.exit(0);
@@ -2724,6 +2804,8 @@ pub fn run() {
             save_ship_model_orientation,
             save_model_hardpoints,
             load_model_hardpoints,
+            review_hardpoint_repo,
+            commit_hardpoint_repo,
             load_ship_model_preview,
             load_absolute_model_preview,
             scan_image_assets,
