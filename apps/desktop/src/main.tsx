@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { HardpointAnalyzer } from "./HardpointAnalyzer";
+import { getModelFolder, setModelFolderPreference, getOrientationManifest, setOrientationManifestPreference } from "./modelToolPreferences";
 import "./styles.css";
 
 type ProjectSummary = {
@@ -3092,10 +3093,8 @@ function AbsoluteModelPreview({
 }
 
 function ModelOrientationTool({ project }: { project: ProjectSummary }) {
-  const [modelFolder, setModelFolder] = useState("assets\\models\\ships");
-  const [manifestPath, setManifestPath] = useState(
-    "refs\\assetForge\\ship-model-orientation.manifest.json"
-  );
+  const [modelFolder, setModelFolder] = useState(() => getModelFolder(project.path));
+  const [manifestPath, setManifestPath] = useState(() => getOrientationManifest(project.path));
   const [catalog, setCatalog] = useState<ShipModelOrientationCatalog | null>(null);
   const [selectedPath, setSelectedPath] = useState("");
   const [draft, setDraft] = useState<ShipModelTransform>({
@@ -3111,12 +3110,16 @@ function ModelOrientationTool({ project }: { project: ProjectSummary }) {
     setStatus("");
     const next = await projectApi.listShipModelOrientations(project.path, modelFolder, manifestPath);
     setCatalog(next);
-    const first = next.models[0];
-    if (first) {
-      setSelectedPath((current) => current || first.modelPath);
-      setDraft(first.transform);
-    }
+    const current = next.models.find((model) => model.modelPath === selectedPath);
+    const chosen = current ?? next.models[0];
+    setSelectedPath(chosen?.modelPath ?? "");
+    if (chosen) setDraft(chosen.transform);
   }
+
+  useEffect(() => {
+    setModelFolder(getModelFolder(project.path));
+    setManifestPath(getOrientationManifest(project.path));
+  }, [project.path]);
 
   useEffect(() => {
     loadCatalog().catch((caught: unknown) =>
@@ -3185,13 +3188,13 @@ function ModelOrientationTool({ project }: { project: ProjectSummary }) {
           label="Model folder"
           value={modelFolder}
           kind="folder"
-          onChange={setModelFolder}
+          onChange={(value) => { setModelFolder(value); setModelFolderPreference(project.path, value); }}
         />
         <PathField
           label="Orientation manifest"
           value={manifestPath}
           kind="file"
-          onChange={setManifestPath}
+          onChange={(value) => { setManifestPath(value); setOrientationManifestPreference(project.path, value); }}
         />
       </div>
 
