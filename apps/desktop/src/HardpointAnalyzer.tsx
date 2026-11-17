@@ -402,7 +402,8 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
         request: { projectPath }
       });
       setRepoStatus(data);
-      setRepoMessage("Review complete. Commit saves only the hardpoint manifest. Push is a separate action.");
+      setRemoteOutOfDate(/behind [0-9]+/.test(data.branchStatus));
+      setRepoMessage("Review complete. Commit saves only changed hardpoint data. Remote integration and Push require separate approval.");
     } catch (error) {
       setRepoStatus(null);
       setRepoMessage("ERROR: " + String(error));
@@ -432,7 +433,7 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
   }
 
   async function pushRepo() {
-    if (!pushApproved || !committedThisSession) return;
+    if (!pushApproved || !repoStatus) return;
     setBusy(true);
     setRepoMessage("");
     try {
@@ -455,7 +456,7 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
   }
 
   async function integrateRemote() {
-    if (!mergeApproved || !committedThisSession) return;
+    if (!mergeApproved || !repoStatus) return;
     setBusy(true);
     setRepoMessage("");
     try {
@@ -588,8 +589,8 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
         <pre>{repoStatus.branchStatus}</pre>
         <pre>{repoStatus.changeStatus}</pre>
       </div> : null}
-      {remoteOutOfDate && committedThisSession ? <div className="tool-note" role="alert">
-        <p><strong>Remote main has newer commits.</strong> Your local hardpoint commit is still preserved. Integrate the remote changes before retrying Push.</p>
+      {repoStatus ? <div className="tool-note" role="status">
+        <p><strong>Integrate Remote Main</strong>{remoteOutOfDate ? ": Remote main has newer commits. Integrate before retrying Push." : ": Check and incorporate any newer remote commits before Push. Existing local commits are preserved."}</p>
         <label><input type="checkbox" checked={mergeApproved} onChange={(e) => setMergeApproved(e.target.checked)} />
           I approve merging remote main into this local main checkout. No force push or reset will be used.
         </label>
@@ -599,7 +600,7 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
           </button>
         </div>
       </div> : null}
-      {committedThisSession ? <>
+      {repoStatus ? <>
         <label><input type="checkbox" checked={pushApproved} onChange={(e) => setPushApproved(e.target.checked)} />
           I have reviewed the repository and understand Push sends the current branch's unpushed commits.
         </label>
