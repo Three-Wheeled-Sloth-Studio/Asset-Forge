@@ -383,6 +383,25 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
       Saved orientation: yaw {selectedModel.transform.yawDegrees}°, pitch {selectedModel.transform.pitchDegrees}°,
       roll {selectedModel.transform.rollDegrees}°. If wrong, correct it in Model Orientation, save, then refresh here.
     </p> : null}
+    {storedReview ? <div className="tool-note" role="status">
+      A stored record was found in {storedReview.manifestPath}.
+      {storedReview.updatedAt ? " Its timestamp is " + storedReview.updatedAt + "." : ""}
+      {sameOrientation(storedReview.savedOrientation, selectedModel!.transform)
+        ? " Its recorded orientation matches this model."
+        : " Its orientation is missing or differs, so restoring it is disabled."}
+      <div className="button-row">
+        <button type="button" disabled={!ready || busy || !sameOrientation(storedReview.savedOrientation, selectedModel!.transform)}
+          onClick={() => {
+            setPoints(storedReview.points.map((point) => ({ ...point })));
+            setStoredReview(null);
+            setStatus("Existing review restored at your request. Verify every point before saving.");
+          }}>Restore Previous Review</button>
+        <button type="button" onClick={() => {
+          setStoredReview(null);
+          setStatus("Keeping fresh unsaved proposals; existing file untouched.");
+        }}>Use Fresh Proposals</button>
+      </div>
+    </div> : null}
     <div className="button-row" aria-label="Camera views">
       {(["stern", "bow", "port", "starboard", "top"] as ViewPreset[]).map((view) =>
         <button key={view} type="button" disabled={!ready} onClick={() => viewPresetRef.current(view)}>
