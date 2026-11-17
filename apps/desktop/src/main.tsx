@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import * as THREE from "three";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { HardpointAnalyzer } from "./HardpointAnalyzer";
 import "./styles.css";
 
 type ProjectSummary = {
@@ -55,6 +56,7 @@ type ActiveTool =
   | "steam-launch-prep"
   | "model-orientation"
   | "model-optimization"
+  | "model-hardpoints"
   | "source-image-orientation"
   | "image-optimization"
   | "trellis-batch"
@@ -1086,6 +1088,8 @@ function App() {
                         ? "steam-launch-prep"
                         : event.target.value === "model-orientation"
                           ? "model-orientation"
+                          : event.target.value === "model-hardpoints"
+                            ? "model-hardpoints"
                           : event.target.value === "model-optimization"
                             ? "model-optimization"
                           : event.target.value === "source-image-orientation"
@@ -1102,6 +1106,7 @@ function App() {
                 >
                   <option value="">Tools</option>
                   <option value="model-orientation">Model Orientation</option>
+                  <option value="model-hardpoints">Model Hardpoints</option>
                   <option value="model-optimization">Model Optimization</option>
                   <option value="source-image-orientation">Source Image Orientation</option>
                   <option value="image-optimization">Image Optimization</option>
@@ -1118,6 +1123,8 @@ function App() {
                   <SteamLaunchPrep project={activeProject.project} />
                 ) : activeTool === "model-orientation" ? (
                   <ModelOrientationTool project={activeProject.project} />
+                ) : activeTool === "model-hardpoints" ? (
+                  <HardpointAnalyzer projectPath={activeProject.project.path} />
                 ) : activeTool === "model-optimization" ? (
                   <ModelOptimizationTool project={activeProject.project} />
                 ) : activeTool === "source-image-orientation" ? (
