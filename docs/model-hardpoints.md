@@ -10,18 +10,18 @@ This first slice is not semantic part recognition and does not rig or animate a 
 
 1. Link Asset Forge to the project checkout that owns the GLBs. For the canonical Imperatus-Assets repo, choose the local checkout as the project folder, and set **Model folder** to `source\\ships` (or `models\\ships` for runtime derivatives). For Black Ledger Orbit, use `assets\\models\\ships`.
 2. Select **Model Hardpoints** in the Tools menu, set the model folder and click **Load Models**.
-3. Select a GLB. The local desktop loads it through the existing Tauri read-only model-preview command. Four initial candidates are projected onto the mesh by actual ray intersections in the model's source geometry: a rear (engine) hint, port/starboard surface hints, and a forward inspection point.
-4. The proposals are **not** named or approved by AI. Their labels are only guesses based on bounding axes. Because some source ships have orientation corrections, inspect bow/stern and sides before accepting.
+3. Select a GLB. The desktop loads it through the Tauri read-only preview command and applies the model's **saved yaw/pitch/roll/scale from Model Orientation** before proposing candidate points. Four candidates are projected onto the oriented mesh using ray intersections: aft (engine hint), port, starboard, and bow inspection. The geometry remains unchanged.
+4. A source GLB may be backwards. In **Model Orientation**, save a correct forward orientation first, then return here and click **Load Models / Refresh Orientation**. Candidate naming uses the canonical **-Z forward, +Y up, -X port, +X starboard** frame *after applying that orientation*. Use **View stern**, **View bow**, **View port**, **View starboard**, and **View top** to inspect. The proposals are still geometry hints, not AI-recognized parts.
 5. Select a candidate row, orbit/zoom the model, click the actual surface to relocate it, then optionally change the type and check **Approve**.
 6. **Save Reviewed Hardpoints** writes `refs/assetForge/model-hardpoints.manifest.json` in the linked project folder. The record stores source-model-local XYZ coordinates, proposal method, individual approval flags, source path, and timestamps. A previous manifest receives a `.json.bak` backup; the ordinary project audit log receives an entry. The original GLB stays untouched.
-7. Reopening the same model reads the previous review rather than replacing approved locations with new proposals.
+7. Reopening the same model reads the previous review rather than replacing approved locations with new proposals. If an earlier proposal was generated before correcting orientation, explicitly select **Refresh Unapproved Suggestions**. Approved points are intentionally preserved for manual verification, since changing orientation should never silently move approved locations.
 
 Current types: `enginePort`, `maneuverThruster`, `navigationLight`, `weaponMountHint`, `cameraInspectAnchor`, `selectionAnchor`, `articulationCandidate`.
 
 ## Limits and next slices
 
 - Browser-only preview cannot access local GLBs. Use the native desktop shell.
-- Raycast candidate positions depend on GLB orientation; this slice doesn't infer real propulsion, symmetry, turret geometry, joint axes, or physical articulation. A single-mesh source can still be examined and assigned exterior surface points.
+- Raycast candidate positions use saved Model Orientation to correct the imported GLB's source axes; this still doesn't infer real propulsion, symmetry, turret geometry, joint axes, or physical articulation. A single-mesh source can still be examined and assigned exterior surface points.
 - Coordinates are **source GLB-local, +Y up**. Downstream consumers must apply the approved orientation transform separately. Do not paste these coordinates directly into normalized Godot bounds fractions without conversion.
 - Exposing an existing approved manifest to TWS-Video, normalizing its coordinates for Godot, supporting per-ship profiles, and introducing 3D visual tests are separate integration tasks.
 - Next geometry analysis: component connectivity, material/UV segmentation, symmetry pairs, candidate normal/orientation, real triangle attachment, surface clearance and part-size heuristics. Add a confidence/evidence column.
@@ -34,3 +34,11 @@ Current types: `enginePort`, `maneuverThruster`, `navigationLight`, `weaponMount
 From the Asset-Forge checkout on Windows, use its normal installer/development launcher and check that the tool opens in the desktop shell. Load a known GLB, select and relocate a point, approve it, save, reopen, and verify the coordinate and approval persist.
 
 Rust/Tauri and WebGL runtime, along with the heavy 1.5M-triangle ship performance, have **not** been tested by the GitHub-only implementation environment. Model-rendering performance may be CPU-bound. Evaluate the optimized LOD first if the full original is slow.
+
+## Model folder persistence and semantic orientation QA (2026-11-17)
+
+The three GLB tools (**Model Orientation**, **Model Hardpoints**, and **Model Optimization**) now share a project-scoped remembered **model folder** via local app preferences. Model Orientation also remembers the chosen orientation-manifest path; the Hardpoints tool reads that same manifest when building suggestions. Switching screens should not reset the folder to a generic `assets\\models\\ships` default. Preferences are machine-local; asset manifests remain project-local.
+
+Important regression test: load a reversed ship, fix and save its yaw in Model Orientation, switch to Model Hardpoints, then refresh models. The corrected orientation must visibly rotate the GLB; aft/port/starboard raycast candidates must be generated using the corrected coordinate frame, not source GLB axes. Confirm red -X arrows and green +X arrows represent the expected **canonical** port/starboard, and use the stern and bow camera view buttons. Existing approved hardpoints must remain unchanged until explicitly reviewed. Test screen switching, app relaunch, model change, and the folder path retained for the same linked project.
+
+Note: A photo or particular ship's apparent left/right is not a substitute for an orientation manifest. For a viewer at the ship's stern looking toward canonical -Z, port is -X (viewer left) and starboard is +X (viewer right). A 180-degree source yaw correction can reverse both labels if applied only visually, so it is essential that both camera geometry and raycasts share the saved transform.
