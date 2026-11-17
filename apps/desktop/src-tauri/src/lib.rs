@@ -2573,6 +2573,7 @@ struct HardpointSaveRequest {
     project_path: String,
     model_folder: String,
     model_path: String,
+    orientation: ShipModelTransform,
     hardpoints: Vec<HardpointDraft>,
 }
 
@@ -2587,8 +2588,18 @@ struct HardpointDraft {
     method: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HardpointReviewReadout {
+    manifest_path: String,
+    found: bool,
+    updated_at: Option<String>,
+    saved_orientation: Option<ShipModelTransform>,
+    points: Vec<HardpointDraft>,
+}
+
 #[tauri::command]
-fn load_model_hardpoints(request: ShipModelPreviewRequest) -> Result<Vec<HardpointDraft>, String> {
+fn load_model_hardpoints(request: ShipModelPreviewRequest) -> Result<HardpointReviewReadout, String> {
     let project_root = local_folder_for_project(&PathBuf::from(&request.project_path))?;
     let model_folder = resolve_project_folder(&request.project_path, &request.model_folder)?;
     let source = model_path_from_res_path(&project_root, &model_folder, &request.model_path)?;
@@ -2596,29 +2607,56 @@ fn load_model_hardpoints(request: ShipModelPreviewRequest) -> Result<Vec<Hardpoi
         return Err("Selected GLB is missing".to_string());
     }
     let manifest = project_root.join("refs").join("assetForge").join("model-hardpoints.manifest.json");
-    if !manifest.exists() { return Ok(Vec::new()); }
-    let doc: serde_json::Value = serde_json::from_slice(&fs::read(&manifest).map_err(|e| e.to_string())?)
-        .map_err(|e| format!("Cannot parse existing hardpoints: {e}"))?;
-    let Some(data) = doc.get("models").and_then(|m| m.get(&request.model_path))
-        .and_then(|m| m.get("hardpoints")) else { return Ok(Vec::new()); };
-    serde_json::from_value(data.clone()).map_err(|e| format!("Invalid saved hardpoints: {e}"))
+    let mut readout = HardpointReviewReadout {
+        manifest_path: manifest.to_string_lossy().to_string(),
+        found: false,
+        updated_at: None,
+        saved_orientation: None,
+        points: Vec::new(),
+    };
+    if !manifest.exists() {
+        return Ok(readout);
+    }
+    let doc: serde_json::Value = serde_json::from_slice(
+        &fs::read(&manifest).map_err(|e| e.to_string())?
+    ).map_err(|e| format!("Cannot parse existing hardpoints: {e}"))?;
+    let Some(record) = doc.get("models").and_then(|m| m.get(&request.model_path)) else {
+        return Ok(readout);
+    };
+    let raw = record.get("hardpoints").ok_or_else(|| "Hardpoint record missing points".to_string())?;
+    readout.points = serde_json::from_value(raw.clone())
+        .map_err(|e| format!("Invalid saved hardpoints: {e}"))?;
+    readout.updated_at = record.get("updatedAt").and_then(|v| v.as_str()).map(str::to_owned);
+    if let Some(value) = record.get("orientation") {
+        readout.saved_orientation = Some(
+            serde_json::from_value(value.clone())
+                .map_err(|e| format!("Invalid saved hardpoint orientation: {e}"))?
+        );
+    }
+    readout.found = true;
+    Ok(readout)
 }
 
 #[tauri::command]
 fn save_model_hardpoints(request: HardpointSaveRequest) -> Result<String, String> {
     let project_root = local_folder_for_project(&PathBuf::from(&request.project_path))?;
     let model_folder = resolve_project_folder(&request.project_path, &request.model_folder)?;
-    // Existing model path must resolve inside the selected project.
     let source = model_path_from_res_path(&project_root, &model_folder, &request.model_path)?;
     if !source.is_file() {
         return Err("Selected GLB is missing".to_string());
     }
-    if request.hardpoints.len() > 32 {
-        return Err("At most 32 proposed hardpoints are allowed per model".to_string());
+    if request.hardpoints.is_empty() || request.hardpoints.len() > 32 {
+        return Err("Choose 1-32 reviewed hardpoints before saving".to_string());
+    }
+    let rotation = &request.orientation;
+    if !rotation.yaw_degrees.is_finite() || !rotation.pitch_degrees.is_finite() ||
+       !rotation.roll_degrees.is_finite() || !rotation.scale.is_finite() || rotation.scale <= 0.0 {
+        return Err("Cannot save hardpoints with invalid model orientation".to_string());
     }
     let mut seen = std::collections::HashSet::new();
     for point in &request.hardpoints {
-        if point.id.is_empty() || !point.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') ||
+        if point.id.is_empty() ||
+           !point.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') ||
            !seen.insert(point.id.clone()) {
             return Err("Hardpoint IDs must be nonempty, safe and unique".to_string());
         }
@@ -2626,7 +2664,8 @@ fn save_model_hardpoints(request: HardpointSaveRequest) -> Result<String, String
              "cameraInspectAnchor", "selectionAnchor", "articulationCandidate"].contains(&point.kind.as_str()) {
             return Err(format!("Unknown hardpoint type: {}", point.kind));
         }
-        if point.label.len() > 120 || !point.position.iter().all(|n| n.is_finite() && n.abs() < 1.0e6) {
+        if point.label.len() > 120 ||
+           !point.position.iter().all(|n| n.is_finite() && n.abs() < 1.0e6) {
             return Err("Invalid hardpoint label or position".to_string());
         }
     }
@@ -2644,11 +2683,11 @@ fn save_model_hardpoints(request: HardpointSaveRequest) -> Result<String, String
         "sourceModelPath": request.model_path.clone(),
         "updatedAt": now_isoish(),
         "proposalStatus": "reviewed",
+        "orientation": request.orientation,
         "hardpoints": request.hardpoints,
-        "notes": "Geometry suggestions only; approved flag records human acceptance. Original GLB untouched."
+        "notes": "Geometry suggestions only; approval records human acceptance. Original GLB untouched."
     }));
     let pretty = serde_json::to_string_pretty(&document).map_err(|e| e.to_string())?;
-    // Keep last reviewed manifest available for recovery on Windows.
     if output.exists() {
         fs::copy(&output, output.with_extension("json.bak"))
             .map_err(|e| format!("Cannot back up prior hardpoint review: {e}"))?;
@@ -2659,7 +2698,7 @@ fn save_model_hardpoints(request: HardpointSaveRequest) -> Result<String, String
         tool: "model-hardpoints".to_string(),
         action: "saved-review".to_string(),
         target: request.model_path,
-        summary: "Saved proposed and approved source-local hardpoint positions; source GLB unchanged.".to_string(),
+        summary: "Saved explicit user review and orientation; original GLB unchanged.".to_string(),
     };
     append_project_audit_log(&project_root, &audit)?;
     Ok(output.to_string_lossy().to_string())
