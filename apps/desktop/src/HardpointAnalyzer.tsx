@@ -56,7 +56,6 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
   const [pushApproved, setPushApproved] = useState(false);
   const [remoteOutOfDate, setRemoteOutOfDate] = useState(false);
   const [mergeApproved, setMergeApproved] = useState(false);
-  const [committedThisSession, setCommittedThisSession] = useState(false);
   const [storedReview, setStoredReview] = useState<StoredReview | null>(null);
   const viewRef = useRef<HTMLDivElement | null>(null);
   const pointsRef = useRef(points);
@@ -71,7 +70,6 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
     setPoints((items) => items.map((point) =>
       point.id === activeRef.current ? { ...point, position, approved: false, method: "surface-click" } : point));
     setRepoStatus(null);
-    setCommittedThisSession(false);
     setPushApproved(false);
   };
 
@@ -384,7 +382,6 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
       setStoredReview(null);
       setRepoStatus(null);
       setPushApproved(false);
-      setCommittedThisSession(false);
       setRemoteOutOfDate(false);
       setMergeApproved(false);
       setRepoMessage("Saved locally, not committed or pushed. Review linked repository when all ships are saved.");
@@ -417,7 +414,6 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
       const result = await invoke<GitActionResult>("commit_hardpoint_repo", {
         request: { projectPath }
       });
-      setCommittedThisSession(true);
       setPushApproved(false);
       setRemoteOutOfDate(false);
       setMergeApproved(false);
@@ -427,7 +423,6 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
       setRepoStatus(data);
       setRepoMessage("COMMITTED locally (not yet pushed): " + result.output);
     } catch (error) {
-      setCommittedThisSession(false);
       setRepoMessage("ERROR: Commit not confirmed: " + String(error));
     } finally { setBusy(false); }
   }
@@ -442,7 +437,6 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
         request: { path: projectPath, action: "push" }
       });
       setPushApproved(false);
-      setCommittedThisSession(false);
       setRemoteOutOfDate(false);
       setMergeApproved(false);
       setRepoMessage("PUSH COMPLETED: " + result.output);
@@ -553,7 +547,6 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
           const checked = e.target.checked;
           setPoints((items) => items.map((item) => item.id === point.id ? { ...item, approved: checked } : item));
           setRepoStatus(null);
-          setCommittedThisSession(false);
           setPushApproved(false);
           setStatus("Approval changed in editor only; use Save Reviewed Hardpoints to persist.");
         }} /></td>
