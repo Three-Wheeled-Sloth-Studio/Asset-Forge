@@ -11,6 +11,11 @@ type Catalog = { models: Model[] };
 type Kind = "enginePort" | "maneuverThruster" | "navigationLight" | "weaponMountHint" | "cameraInspectAnchor" | "selectionAnchor" | "articulationCandidate";
 type Point = { id: string; kind: Kind; label: string; position: [number, number, number]; approved: boolean; method: string };
 type ViewPreset = "stern" | "bow" | "port" | "starboard" | "top";
+type RepoStatus = {
+  repository: string; manifestPath: string; modelCount: number;
+  approvedModelCount: number; changeStatus: string; branchStatus: string;
+};
+type GitActionResult = { command: string; output: string };
 type StoredReview = { found: boolean; manifestPath: string; updatedAt: string | null; savedOrientation: ModelTransform | null; points: Point[] };
 function sameOrientation(a: ModelTransform | null, b: ModelTransform): boolean {
   return a !== null && (["yawDegrees", "pitchDegrees", "rollDegrees", "scale"] as const)
@@ -46,6 +51,10 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
   const [status, setStatus] = useState("Load models, then review proposals from the saved model orientation.");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [repoStatus, setRepoStatus] = useState<RepoStatus | null>(null);
+  const [repoMessage, setRepoMessage] = useState("");
+  const [pushApproved, setPushApproved] = useState(false);
+  const [committedThisSession, setCommittedThisSession] = useState(false);
   const [storedReview, setStoredReview] = useState<StoredReview | null>(null);
   const viewRef = useRef<HTMLDivElement | null>(null);
   const pointsRef = useRef(points);
@@ -366,9 +375,66 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
         request: { projectPath, modelFolder: folder, modelPath: selected, orientation: selectedModel!.transform, hardpoints: points }
       });
       setStoredReview(null);
+      setRepoStatus(null);
+      setPushApproved(false);
+      setCommittedThisSession(false);
+      setRepoMessage("Saved locally, not committed or pushed. Review linked repository when all ships are saved.");
       setStatus("Explicitly saved this review to: " + output);
     } catch (error) { setStatus("ERROR: Save failed: " + String(error)); }
     finally { setBusy(false); }
+  }
+
+  async function reviewRepo() {
+    setBusy(true);
+    setRepoMessage("");
+    setPushApproved(false);
+    try {
+      const data = await invoke<RepoStatus>("review_hardpoint_repo", {
+        request: { projectPath }
+      });
+      setRepoStatus(data);
+      setRepoMessage("Review complete. Commit saves only the hardpoint manifest. Push is a separate action.");
+    } catch (error) {
+      setRepoStatus(null);
+      setRepoMessage("ERROR: " + String(error));
+    } finally { setBusy(false); }
+  }
+
+  async function commitRepo() {
+    setBusy(true);
+    setRepoMessage("");
+    try {
+      const result = await invoke<GitActionResult>("commit_hardpoint_repo", {
+        request: { projectPath }
+      });
+      setCommittedThisSession(true);
+      setPushApproved(false);
+      const data = await invoke<RepoStatus>("review_hardpoint_repo", {
+        request: { projectPath }
+      });
+      setRepoStatus(data);
+      setRepoMessage("COMMITTED locally (not yet pushed): " + result.output);
+    } catch (error) {
+      setCommittedThisSession(false);
+      setRepoMessage("ERROR: Commit not confirmed: " + String(error));
+    } finally { setBusy(false); }
+  }
+
+  async function pushRepo() {
+    if (!pushApproved || !committedThisSession) return;
+    setBusy(true);
+    setRepoMessage("");
+    try {
+      // Uses Asset Forge's existing linked-project remote configuration.
+      const result = await invoke<GitActionResult>("sync_external_project", {
+        request: { path: projectPath, action: "push" }
+      });
+      setPushApproved(false);
+      setCommittedThisSession(false);
+      setRepoMessage("PUSH COMPLETED: " + result.output);
+    } catch (error) {
+      setRepoMessage("ERROR: Git push did not succeed: " + String(error));
+    } finally { setBusy(false); }
   }
 
   function onFolderChange(value: string) {
@@ -462,6 +528,36 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
     <div className="button-row"><button type="button" className="primary" disabled={busy || !ready || !selected || !points.length} onClick={() => void save()}>
       Save Reviewed Hardpoints
     </button></div>
+    <section className="detail-card" aria-label="Publish reviewed hardpoints to linked repository">
+      <h4>Linked repository publication</h4>
+      <p className="tool-note">
+        Save all ships locally first. Review covers the complete shared manifest, not just the selected ship.
+        Commit records only that manifest; pushing may publish other unpushed branch commits as well.
+      </p>
+      <div className="button-row">
+        <button type="button" disabled={busy} onClick={() => void reviewRepo()}>Review Git Status</button>
+        <button type="button" disabled={busy || !repoStatus || repoStatus.approvedModelCount === 0}
+          onClick={() => void commitRepo()}>Commit Hardpoint Manifest</button>
+      </div>
+      {repoStatus ? <div className="tool-note">
+        <p><strong>Linked repository:</strong> {repoStatus.repository}</p>
+        <p><strong>Stored models:</strong> {repoStatus.modelCount} / <strong>With approvals:</strong> {repoStatus.approvedModelCount}</p>
+        <p><strong>Manifest:</strong> {repoStatus.manifestPath}</p>
+        <pre>{repoStatus.branchStatus}</pre>
+        <pre>{repoStatus.changeStatus}</pre>
+      </div> : null}
+      {committedThisSession ? <>
+        <label><input type="checkbox" checked={pushApproved} onChange={(e) => setPushApproved(e.target.checked)} />
+          I have reviewed the repository and understand Push sends the current branch's unpushed commits.
+        </label>
+        <div className="button-row">
+          <button type="button" disabled={busy || !pushApproved} onClick={() => void pushRepo()}>
+            Push to Linked Repository
+          </button>
+        </div>
+      </> : null}
+      {repoMessage ? <p role="status" className="tool-note">{repoMessage}</p> : null}
+    </section>
     <p className="tool-note" role="status">{status}</p>
   </div>;
 }
