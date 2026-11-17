@@ -84,3 +84,9 @@ The first model-orientation workflow is documented in [`docs/model-orientation-t
 ## Current Status
 
 This is an initialized starter scaffold aligned with the product and architecture handoff. The next implementation step is wiring the project schema and CSV import flow.
+
+## Model Hardpoints (first interactive slice)
+
+A new **Model Hardpoints** tool in the desktop project's Tools menu loads linked GLBs using the existing native preview bridge, estimates four exterior candidate points by geometry raycasts, and lets the user place a selected candidate directly on the model before approval. Results are stored non-destructively in the linked project's `refs/assetForge/model-hardpoints.manifest.json`, with an audit entry and backup of the previous review. No source GLB modification, AI model install, or external API is involved.
+
+This is an intentionally **geometry-only** proposal workflow: engine, navigation, and other semantic labels are hints, not verified identifications. Reopen a model to restore saved reviews. See [Model Hardpoints](docs/model-hardpoints.md) for setup, coordinate system, limitations, and QA.
