@@ -1,5 +1,16 @@
 # Current Handoff
 
+## Model Hardpoints QA fixes (2026-11-17)
+- User provided a screenshot of Gilded Caravan Guard in Asset-Forge; its raw GLB was facing backward until corrected in Model Orientation. Even after that correction, the original hardpoint tool still generated 'port' from raw GLB -X, so the starboard side was incorrectly labeled. The model folder also reset when switching tools.
+- **Fix:** Hardpoint preview now reads each model's saved yaw, pitch, roll and scale from the same project-local orientation manifest as Model Orientation. The scene applies this orientation *before* raycasting candidate positions, in a separate parent group from preview-only mesh normalization. Candidate directions use canonical right-handed axes: -Z forward, +Y up, -X port, +X starboard. Points remain saved in source-GLB-local coordinates using root.worldToLocal, preserving the existing downstream coordinate contract. This corrects both visible orientation and semantic side selection; it does not infer actual engine geometry.
+- Added explicit View stern, View bow, View port, View starboard, View top camera presets and colored canonical direction arrows. UI displays saved orientation, explains model versus preview coordinates, and provides **Refresh Unapproved Suggestions**. Existing approved points are deliberately kept rather than silently repositioned or relabeled when orientation changes.
+- **Persistence:** new `apps/desktop/src/modelToolPreferences.ts` stores model folder under project-specific local-storage key; shared by Model Orientation, Model Hardpoints and Model Optimization. Orientation manifest selection is also remembered and used by Hardpoints. Switching screens or relaunching should retain the last folder for each linked project, without writing machine preferences into portable asset manifests.
+- Docs updated: `docs/model-hardpoints.md` and `docs/tooling-checklist.md`. Existing reviewed hardpoint manifests and GLB files are untouched.
+- **QA still required on Windows:** `git pull origin main`; `.\\launch-asset-forge.cmd`; select same linked project and confirm model folder survives tool switch and app relaunch; open corrected ship, verify orientation y/p/r, click **Load Models / Refresh Orientation**, use port/starboard camera presets and regenerated unapproved suggestions, then approve only physically correct candidate locations. Check that already-approved points remain unchanged.
+- No Rust/Tauri or desktop WebGL runtime checks performed from this GitHub-only session. Build/typecheck need local validation; if any launch error, capture exact message and fix. Future improvement: record orientation revision with each hardpoint review to detect stale approvals, add editable labels and surface-normal axes.
+
+
+
 ## Current focus
 Durable project memory has moved into the `refs/` structure. The latest work filled out project identity, module ownership, architecture boundaries, handoff/logging structures, validation commands, and testing criteria.
 
