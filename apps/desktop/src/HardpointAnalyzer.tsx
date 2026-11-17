@@ -21,6 +21,15 @@ const types: Kind[] = ["enginePort", "navigationLight", "maneuverThruster", "wea
 
 // Directions are in the canonical, *oriented* frame, not the source GLB axes.
 // With -Z forward and +Y up, port is -X and starboard is +X.
+const markerColors: Record<string, number> = {
+  "engine-port": 0x2fb8ff,
+  "port-light": 0xff5e68,
+  "starboard-light": 0x4dde91,
+  "inspection": 0xf6c55d,
+};
+function markerColor(id: string): number { return markerColors[id] ?? 0xb695ff; }
+function markerCss(id: string): string { return "#" + markerColor(id).toString(16).padStart(6, "0"); }
+
 const proposals: Array<[string, Kind, string, THREE.Vector3]> = [
   ["engine-port", "enginePort", "Aft surface (engine hint)", new THREE.Vector3(0, 0, 1)],
   ["port-light", "navigationLight", "Port hull (-X)", new THREE.Vector3(-1, 0, 0)],
@@ -272,6 +281,14 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
       const ndc = new THREE.Vector2(2 * (event.clientX - bounds.left) / bounds.width - 1,
         1 - 2 * (event.clientY - bounds.top) / bounds.height);
       ray.setFromCamera(ndc, camera);
+      // Selecting a colored marker is separate from moving it. Only clicking
+      // the hull relocates whichever marker is visibly selected.
+      const markerHits = ray.intersectObjects(Array.from(visibleMarkers.values()), false);
+      if (markerHits.length) {
+        const id = markerHits[0].object.userData.hardpointId as string;
+        if (id) { setActiveId(id); setStatus("Selected " + (pointsRef.current.find(p => p.id === id)?.label ?? id) + ". Click hull to move it."); }
+        return;
+      }
       const hits = ray.intersectObject(oriented, true);
       if (hits.length) updatePointRef.current(sourcePosition(hits[0].point));
     }
@@ -304,8 +321,9 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
             markers.add(marker);
             visibleMarkers.set(point.id, marker);
           }
-          (marker.material as THREE.MeshBasicMaterial).color.setHex(
-            point.approved ? 0x50cf88 : point.id === activeRef.current ? 0xffd977 : 0x65b5ff);
+          marker.userData.hardpointId = point.id;
+          (marker.material as THREE.MeshBasicMaterial).color.setHex(markerColor(point.id));
+          marker.scale.setScalar(point.id === activeRef.current ? 2.1 : 1.35);
           marker.position.copy(gltfRoot.localToWorld(new THREE.Vector3(...point.position)));
         }
       }
@@ -415,13 +433,22 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
     <p className="preview-help">
       Drag to orbit; wheel to zoom. Click the mesh to relocate the selected candidate.
       Gold arrow: bow (-Z); red: port (-X); green: starboard (+X).
-      Blue marker: unapproved; yellow: selected; green: approved.
+      Cyan: engine; red: port; green: starboard; gold: bow. Selected marker is larger.
+      Click a marker to select it, then click hull to reposition. Approval is separate from selection.
+    </p>
+    <p className="tool-note" role="status" style={{fontWeight:700}}>
+      {points.length ? "Moving: " + (points.find(p => p.id === activeId)?.label ?? "Select a marker") +
+        " (large marker). Select another colored marker or its row before moving." : "No hardpoints loaded."}
+      {" "}Approval stays in memory until you click Save Reviewed Hardpoints.
     </p>
     <table><thead><tr><th>Approve</th><th>Candidate</th><th>Type</th><th>Source-local XYZ</th></tr></thead><tbody>
       {points.map((point) => <tr key={point.id} style={{ background: point.id === activeId ? "rgba(120,160,190,.15)" : undefined }}>
         <td><input aria-label={`Approve ${point.label}`} type="checkbox" checked={point.approved} onChange={(e) =>
-          setPoints((items) => items.map((item) => item.id === point.id ? { ...item, approved: e.target.checked } : item))} /></td>
-        <td><button type="button" onClick={() => setActiveId(point.id)}>{point.label}</button></td>
+          setPoints((items) => items.map((item) => item.id === point.id ? { ...item, approved: e.target.checked } : item)); setStatus("Approval changed in editor only; use Save Reviewed Hardpoints to persist.");} /></td>
+        <td><button type="button" onClick={() => setActiveId(point.id)} aria-pressed={activeId === point.id}>
+          <span aria-hidden="true" style={{display:"inline-block",width:12,height:12,borderRadius:"50%",background:markerCss(point.id),marginRight:8}} />
+          {activeId === point.id ? "Selected: " : "Select: "}{point.label}
+        </button></td>
         <td><select value={point.kind} onChange={(e) => setPoints((items) => items.map((item) =>
           item.id === point.id ? { ...item, kind: e.target.value as Kind, approved: false } : item))}>
           {types.map((type) => <option key={type} value={type}>{type}</option>)}
