@@ -54,6 +54,8 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
   const [repoStatus, setRepoStatus] = useState<RepoStatus | null>(null);
   const [repoMessage, setRepoMessage] = useState("");
   const [pushApproved, setPushApproved] = useState(false);
+  const [remoteOutOfDate, setRemoteOutOfDate] = useState(false);
+  const [mergeApproved, setMergeApproved] = useState(false);
   const [committedThisSession, setCommittedThisSession] = useState(false);
   const [storedReview, setStoredReview] = useState<StoredReview | null>(null);
   const viewRef = useRef<HTMLDivElement | null>(null);
@@ -383,6 +385,8 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
       setRepoStatus(null);
       setPushApproved(false);
       setCommittedThisSession(false);
+      setRemoteOutOfDate(false);
+      setMergeApproved(false);
       setRepoMessage("Saved locally, not committed or pushed. Review linked repository when all ships are saved.");
       setStatus("Explicitly saved this review to: " + output);
     } catch (error) { setStatus("ERROR: Save failed: " + String(error)); }
@@ -414,6 +418,8 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
       });
       setCommittedThisSession(true);
       setPushApproved(false);
+      setRemoteOutOfDate(false);
+      setMergeApproved(false);
       const data = await invoke<RepoStatus>("review_hardpoint_repo", {
         request: { projectPath }
       });
@@ -436,9 +442,37 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
       });
       setPushApproved(false);
       setCommittedThisSession(false);
+      setRemoteOutOfDate(false);
+      setMergeApproved(false);
       setRepoMessage("PUSH COMPLETED: " + result.output);
     } catch (error) {
-      setRepoMessage("ERROR: Git push did not succeed: " + String(error));
+      const detail = String(error);
+      setRemoteOutOfDate(/fetch first|non-fast-forward|rejected.*main/i.test(detail));
+      setMergeApproved(false);
+      setPushApproved(false);
+      setRepoMessage("ERROR: Git push did not succeed: " + detail);
+    } finally { setBusy(false); }
+  }
+
+  async function integrateRemote() {
+    if (!mergeApproved || !committedThisSession) return;
+    setBusy(true);
+    setRepoMessage("");
+    try {
+      const result = await invoke<GitActionResult>("integrate_hardpoint_remote", {
+        request: { projectPath }
+      });
+      const data = await invoke<RepoStatus>("review_hardpoint_repo", {
+        request: { projectPath }
+      });
+      setRepoStatus(data);
+      setRemoteOutOfDate(false);
+      setMergeApproved(false);
+      setPushApproved(false);
+      setRepoMessage("REMOTE INTEGRATED: " + result.output + " Review the repository, then approve Push separately.");
+    } catch (error) {
+      setMergeApproved(false);
+      setRepoMessage("ERROR: Remote integration did not complete: " + String(error));
     } finally { setBusy(false); }
   }
 
@@ -554,12 +588,23 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
         <pre>{repoStatus.branchStatus}</pre>
         <pre>{repoStatus.changeStatus}</pre>
       </div> : null}
+      {remoteOutOfDate && committedThisSession ? <div className="tool-note" role="alert">
+        <p><strong>Remote main has newer commits.</strong> Your local hardpoint commit is still preserved. Integrate the remote changes before retrying Push.</p>
+        <label><input type="checkbox" checked={mergeApproved} onChange={(e) => setMergeApproved(e.target.checked)} />
+          I approve merging remote main into this local main checkout. No force push or reset will be used.
+        </label>
+        <div className="button-row">
+          <button type="button" disabled={busy || !mergeApproved} onClick={() => void integrateRemote()}>
+            Integrate Remote Main
+          </button>
+        </div>
+      </div> : null}
       {committedThisSession ? <>
         <label><input type="checkbox" checked={pushApproved} onChange={(e) => setPushApproved(e.target.checked)} />
           I have reviewed the repository and understand Push sends the current branch's unpushed commits.
         </label>
         <div className="button-row">
-          <button type="button" disabled={busy || !pushApproved} onClick={() => void pushRepo()}>
+          <button type="button" disabled={busy || !pushApproved || remoteOutOfDate} onClick={() => void pushRepo()}>
             Push to Linked Repository
           </button>
         </div>
