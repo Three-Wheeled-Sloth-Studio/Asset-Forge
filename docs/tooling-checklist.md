@@ -7,7 +7,7 @@ but the tools need selectable input/output paths and reusable manifests.
 
 - [x] First-pass model orientation manifest editor.
 - [x] Add configurable input model folder and output manifest path.
-- [ ] Add a model hardpoint editor for attachment metadata.
+- [x] Add a first-pass model hardpoint review tool with GLB surface-raycast candidate points, click-to-reposition, per-point approval, and a project-local manifest.\n- [ ] Improve hardpoint editor with joint-axis previews, editable radius and exact triangle attachment.
 - [ ] Support hardpoint types:
   - `enginePort`
   - `maneuverThruster`
