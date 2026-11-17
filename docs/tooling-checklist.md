@@ -7,15 +7,17 @@ but the tools need selectable input/output paths and reusable manifests.
 
 - [x] First-pass model orientation manifest editor.
 - [x] Add configurable input model folder and output manifest path.
-- [x] Add a first-pass model hardpoint review tool with GLB surface-raycast candidate points, click-to-reposition, per-point approval, and a project-local manifest.\n- [ ] Improve hardpoint editor with joint-axis previews, editable radius and exact triangle attachment.
-- [ ] Support hardpoint types:
+- [x] Add a first-pass model hardpoint review tool with GLB surface-raycast candidate points, click-to-reposition, per-point approval, and a project-local manifest.
+- [ ] Improve hardpoint editor with joint-axis previews, editable radius and exact triangle attachment.
+- [x] Support initial hardpoint type selection (enginePort, navigationLight, maneuverThruster, weaponMountHint, cameraInspectAnchor, selectionAnchor, articulationCandidate). Further semantics need verification:
   - `enginePort`
   - `maneuverThruster`
   - `weaponMountHint`
   - `cameraInspectAnchor`
   - `selectionAnchor`
-- [ ] Show hardpoints in the previewer with editable position, rotation, radius, and label.
-- [ ] Save hardpoints beside orientation transforms in a non-destructive asset manifest.
+- [x] Show hardpoint markers in 3D preview and allow click-to-reposition source-local XYZ.
+- [ ] Add label, orientation/rotation, and radius editing with surface normal visualization.
+- [x] Save approved and proposed hardpoints to a separate non-destructive model-hardpoints manifest with audit log; maintain distinct orientation manifest.
 - [ ] Add optional Blender automation to bake approved transforms into generated copies.
 - [ ] Keep original source models untouched unless the user explicitly promotes generated output.
 
