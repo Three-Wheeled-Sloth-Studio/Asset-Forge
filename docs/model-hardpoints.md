@@ -65,3 +65,18 @@ User accepted four candidate hardpoints but reported the earlier editor was diff
 The top project toolbar also has **Reload UI**. This refreshes the desktop/web UI without stopping and recompiling the native Tauri Rust backend. It should not be mistaken for a full backend rebuild or a source-control pull. A full in-app dev rebuild/relaunch comparable to Song Harbor remains a follow-up task; avoid promising it is implemented by the UI reload alone.
 
 Important integration: Saving hardpoints in a linked local project is not a Git upload. TWS-Video now has an explicit local importer (`scripts/import-ship-hardpoints.bat`) which selects approved Guard engine and port/starboard positions from this manifest and transforms them for the Godot model. See the TWS-Video README. Do not push source models to a public repo. The private asset publication tool will eventually live in Asset Forge, with separate review, commit, and publish actions.
+
+
+## Fleet publication within Asset Forge (2026-11-17)
+
+The hardpoint review manifest stores **multiple GLB model records** under one `models` object. Saving one model updates its record, not the other ships' records.
+
+New in-app **Linked repository publication** section below the Hardpoint Analyzer:
+1. After saving each reviewed ship, click **Review Git Status**. The app identifies the exact linked repository, absolute manifest path, total stored models, number containing approved points, manifest change status, and current branch Git status.
+2. **Commit Hardpoint Manifest** creates a local Git commit containing only `refs/assetForge/model-hardpoints.manifest.json`; other staged changes are not intentionally included. This step does **not push**.
+3. Read the branch status and acknowledge that **Push to Linked Repository** sends all currently unpushed commits on the linked branch, not just the manifest change. Push is a separate explicit click and uses the existing linked project Git credentials, remote and branch.
+4. If the local repository is not configured, has no manifest, no approved points, lacks Git credentials, has an invalid remote or fails push, show a clear error; do not imply publication succeeded.
+
+Git commits/pushes are not automatic when clicking **Save Reviewed Hardpoints**, checking Approve boxes, or changing models. The in-app publishing controls require the **Tauri desktop**; browser mode cannot commit Git repositories. The new Rust commands and React UI need Windows integration testing. The manifest remains in the linked private repository, never copied into public Asset-Forge sources.
+
+**TWS-Video fleet handoff:** The TWS-Video `scripts/import-ship-hardpoints.bat` command now imports *all* approved model records into ignored local `.local/assets/ship-hardpoints-fleet.json`, displaying counts per ship. A separate legacy cache is refreshed only for the currently supported Gilded Caravan Guard engine-light rig. Importing other ships does not change which GLB is staged in Blackbox Gospel; model selection/staging for future videos is a distinct feature.
