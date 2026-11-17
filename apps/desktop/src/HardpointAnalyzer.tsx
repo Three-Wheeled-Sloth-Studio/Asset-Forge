@@ -65,8 +65,13 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
 
   pointsRef.current = points;
   activeRef.current = activeId;
-  updatePointRef.current = (position) => setPoints((items) => items.map((point) =>
-    point.id === activeRef.current ? { ...point, position, approved: false, method: "surface-click" } : point));
+  updatePointRef.current = (position) => {
+    setPoints((items) => items.map((point) =>
+      point.id === activeRef.current ? { ...point, position, approved: false, method: "surface-click" } : point));
+    setRepoStatus(null);
+    setCommittedThisSession(false);
+    setPushApproved(false);
+  };
 
   const selectedModel = models.find((model) => model.modelPath === selected) ?? null;
 
@@ -456,7 +461,7 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
     </p>
     <div className="image-config-grid">
       <label>Model folder <input value={folder} onChange={(e) => onFolderChange(e.target.value)} /></label>
-      <label>Model <select value={selected} onChange={(e) => { setSelected(e.target.value); setPoints([]); setStoredReview(null); setReady(false); }}>
+      <label>Model <select value={selected} onChange={(e) => { setSelected(e.target.value); setPoints([]); setStoredReview(null); setRepoStatus(null); setCommittedThisSession(false); setPushApproved(false); setReady(false); }}>
         {models.map((model) => <option key={model.modelPath} value={model.modelPath}>{model.fileName}</option>)}
       </select></label>
     </div>
@@ -512,6 +517,9 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
         <td><input aria-label={`Approve ${point.label}`} type="checkbox" checked={point.approved} onChange={(e) => {
           const checked = e.target.checked;
           setPoints((items) => items.map((item) => item.id === point.id ? { ...item, approved: checked } : item));
+          setRepoStatus(null);
+          setCommittedThisSession(false);
+          setPushApproved(false);
           setStatus("Approval changed in editor only; use Save Reviewed Hardpoints to persist.");
         }} /></td>
         <td><button type="button" onClick={() => setActiveId(point.id)} aria-pressed={activeId === point.id}>
