@@ -2653,7 +2653,7 @@ fn save_model_hardpoints(request: HardpointSaveRequest) -> Result<String, String
         fs::copy(&output, output.with_extension("json.bak"))
             .map_err(|e| format!("Cannot back up prior hardpoint review: {e}"))?;
     }
-    fs::write(&output, format!("{pretty}\\n")).map_err(|e| e.to_string())?;
+    fs::write(&output, format!("{pretty}\n")).map_err(|e| e.to_string())?;
     let audit = HandoffAuditEntry {
         timestamp: now_isoish(),
         tool: "model-hardpoints".to_string(),
