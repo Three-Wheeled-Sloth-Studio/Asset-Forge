@@ -219,7 +219,7 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
         scene.updateMatrixWorld(true);
         candidateSuggestions = propose(oriented);
         readyGeometry = true;
-        setReady(true);
+        // Disable editing and saving until any existing record is checked.
         // Display fresh proposals by default. An existing file is not proof
         // that this user saved or approved those older coordinates.
         setPoints(candidateSuggestions);
@@ -227,6 +227,7 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
           request: { projectPath, modelFolder: folder, modelPath: selectedModel.modelPath }
         }).then((previous) => {
           if (disposed) return;
+          setReady(true);
           setStoredReview(previous.found ? previous : null);
           if (previous.found) {
             const compatible = sameOrientation(previous.savedOrientation, transform);
