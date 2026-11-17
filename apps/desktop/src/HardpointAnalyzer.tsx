@@ -185,7 +185,7 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
           !approved.some((point) => point.id === candidate.id));
         return [...approved, ...remaining];
       });
-      setStatus("Refreshed unapproved candidates using saved model orientation. Approved points preserved.");
+      setStatus("Regenerated current candidates; preserved only previously approved draft points. Nothing saved.");
     };
 
     setStatus("Loading GLB and saved orientation...");
@@ -220,23 +220,32 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
         candidateSuggestions = propose(oriented);
         readyGeometry = true;
         setReady(true);
-        void invoke<Point[]>("load_model_hardpoints", {
+        // Display fresh proposals by default. An existing file is not proof
+        // that this user saved or approved those older coordinates.
+        setPoints(candidateSuggestions);
+        void invoke<StoredReview>("load_model_hardpoints", {
           request: { projectPath, modelFolder: folder, modelPath: selectedModel.modelPath }
-        }).then((saved) => {
+        }).then((previous) => {
           if (disposed) return;
-          if (saved.length) {
-            setPoints(saved);
-            setStatus("Loaded saved hardpoints. Review previous labels against corrected orientation; use Refresh to replace unapproved suggestions.");
+          setStoredReview(previous.found ? previous : null);
+          if (previous.found) {
+            const compatible = sameOrientation(previous.savedOrientation, transform);
+            setStatus("Fresh candidates generated. Existing file found at " + previous.manifestPath +
+              (previous.updatedAt ? " (timestamp " + previous.updatedAt + ")" : "") +
+              ". Its data was NOT automatically loaded. " +
+              (compatible ? "You may restore it explicitly." :
+                "The saved orientation is absent or different: inspect before importing."));
           } else {
-            setPoints(candidateSuggestions);
             setStatus(candidateSuggestions.length
-              ? "Surface candidates aligned to the saved yaw/pitch/roll. Check each semantic label before approving."
-              : "No mesh intersections found. Inspect model geometry and saved orientation.");
+              ? "New unsaved proposals from the saved orientation. No persisted record for this model."
+              : "No surface intersections found. Check model geometry and orientation.");
           }
         }).catch((error) => {
           if (disposed) return;
+          setStoredReview(null);
           setPoints([]);
-          setStatus("ERROR: Could not read saved review; refusing to replace it: " + String(error));
+          setReady(false);
+          setStatus("ERROR: Cannot verify existing hardpoint records: " + String(error));
         });
       }, (error) => setStatus("ERROR: GLB parse failed: " + String(error)));
     }).catch((error) => setStatus("ERROR: GLB loading failed: " + String(error)));
@@ -335,9 +344,10 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
     setBusy(true);
     try {
       const output = await invoke<string>("save_model_hardpoints", {
-        request: { projectPath, modelFolder: folder, modelPath: selected, hardpoints: points }
+        request: { projectPath, modelFolder: folder, modelPath: selected, orientation: selectedModel!.transform, hardpoints: points }
       });
-      setStatus("Saved reviewed points: " + output);
+      setStoredReview(null);
+      setStatus("Explicitly saved this review to: " + output);
     } catch (error) { setStatus("ERROR: Save failed: " + String(error)); }
     finally { setBusy(false); }
   }
@@ -349,6 +359,7 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
     setSelected("");
     setPoints([]);
     setReady(false);
+    setStoredReview(null);
   }
 
   return <div className="orientation-tool">
@@ -360,13 +371,13 @@ export function HardpointAnalyzer({ projectPath }: { projectPath: string }) {
     </p>
     <div className="image-config-grid">
       <label>Model folder <input value={folder} onChange={(e) => onFolderChange(e.target.value)} /></label>
-      <label>Model <select value={selected} onChange={(e) => { setSelected(e.target.value); setPoints([]); setReady(false); }}>
+      <label>Model <select value={selected} onChange={(e) => { setSelected(e.target.value); setPoints([]); setStoredReview(null); setReady(false); }}>
         {models.map((model) => <option key={model.modelPath} value={model.modelPath}>{model.fileName}</option>)}
       </select></label>
     </div>
     <div className="button-row">
       <button type="button" disabled={busy} onClick={() => void load()}>Load Models / Refresh Orientation</button>
-      <button type="button" disabled={!ready || busy} onClick={() => regenerateRef.current()}>Refresh Unapproved Suggestions</button>
+      <button type="button" disabled={!ready || busy} onClick={() => regenerateRef.current()}>Regenerate Current Proposals</button>
     </div>
     {selectedModel ? <p className="tool-note">
       Saved orientation: yaw {selectedModel.transform.yawDegrees}°, pitch {selectedModel.transform.pitchDegrees}°,
