@@ -890,9 +890,24 @@ function App() {
 
   useEffect(() => {
     refreshProjects()
-      .then((nextProjects) => {
-        if (nextProjects[0]) {
-          return openProject(nextProjects[0]);
+      .then(async (nextProjects) => {
+        // Preserve the exact project and tool when Reload UI is used.
+        // No persistent secret or model data is stored in session storage.
+        let savedProject = "";
+        let savedTool = "";
+        try {
+          savedProject = sessionStorage.getItem("asset-forge:reload-project") ?? "";
+          savedTool = sessionStorage.getItem("asset-forge:reload-tool") ?? "";
+          sessionStorage.removeItem("asset-forge:reload-project");
+          sessionStorage.removeItem("asset-forge:reload-tool");
+        } catch { /* continue with first project */ }
+        const chosen = nextProjects.find(p => p.projectId === savedProject) ?? nextProjects[0];
+        if (chosen) {
+          await openProject(chosen);
+          if (["model-hardpoints", "model-orientation", "model-optimization", "source-image-orientation",
+               "image-optimization", "trellis-batch", "asset-handoff", "steam-launch-prep"].includes(savedTool)) {
+            setActiveTool(savedTool as ActiveTool);
+          }
         }
       })
       .catch((caught: unknown) =>
@@ -1031,7 +1046,13 @@ function App() {
               className="rail-action-button"
               aria-label="Reload Asset Forge UI"
               title="Reload UI (backend changes still require relaunch)"
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                try {
+                  sessionStorage.setItem("asset-forge:reload-project", activeProject?.project.projectId ?? "");
+                  sessionStorage.setItem("asset-forge:reload-tool", activeTool ?? "");
+                } catch { /* reload still works without state persistence */ }
+                window.location.reload();
+              }}
             >
               ↻
             </button>
