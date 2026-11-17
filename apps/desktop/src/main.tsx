@@ -1029,6 +1029,15 @@ function App() {
             <button
               type="button"
               className="rail-action-button"
+              aria-label="Reload Asset Forge UI"
+              title="Reload UI (backend changes still require relaunch)"
+              onClick={() => window.location.reload()}
+            >
+              ↻
+            </button>
+            <button
+              type="button"
+              className="rail-action-button"
               aria-label="Close Asset Forge"
               title="Close Asset Forge"
               onClick={() => void closeApp()}
