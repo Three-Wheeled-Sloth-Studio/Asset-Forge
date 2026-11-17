@@ -2588,6 +2588,23 @@ struct HardpointDraft {
 }
 
 #[tauri::command]
+fn load_model_hardpoints(request: ShipModelPreviewRequest) -> Result<Vec<HardpointDraft>, String> {
+    let project_root = local_folder_for_project(&PathBuf::from(&request.project_path))?;
+    let model_folder = resolve_project_folder(&request.project_path, &request.model_folder)?;
+    let source = model_path_from_res_path(&project_root, &model_folder, &request.model_path)?;
+    if !source.is_file() {
+        return Err("Selected GLB is missing".to_string());
+    }
+    let manifest = project_root.join("refs").join("assetForge").join("model-hardpoints.manifest.json");
+    if !manifest.exists() { return Ok(Vec::new()); }
+    let doc: serde_json::Value = serde_json::from_slice(&fs::read(&manifest).map_err(|e| e.to_string())?)
+        .map_err(|e| format!("Cannot parse existing hardpoints: {e}"))?;
+    let Some(data) = doc.get("models").and_then(|m| m.get(&request.model_path))
+        .and_then(|m| m.get("hardpoints")) else { return Ok(Vec::new()); };
+    serde_json::from_value(data.clone()).map_err(|e| format!("Invalid saved hardpoints: {e}"))
+}
+
+#[tauri::command]
 fn save_model_hardpoints(request: HardpointSaveRequest) -> Result<String, String> {
     let project_root = local_folder_for_project(&PathBuf::from(&request.project_path))?;
     let model_folder = resolve_project_folder(&request.project_path, &request.model_folder)?;
@@ -2664,6 +2681,7 @@ pub fn run() {
             list_ship_model_orientations,
             save_ship_model_orientation,
             save_model_hardpoints,
+            load_model_hardpoints,
             load_ship_model_preview,
             load_absolute_model_preview,
             scan_image_assets,
