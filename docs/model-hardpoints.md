@@ -56,3 +56,12 @@ A user saw a correct **yaw 180** ship preview, but candidate labels and XYZ valu
 
 **QA on a reversed GLB**: Save yaw 180 in Model Orientation, go to Hardpoints, load/reload models. With the canonical -Z bow, the physically forward-most surface should be the **Bow surface (-Z)** proposal, not the aft deck. Port (-X) and starboard (+X) proposal points should follow the corrected ship hull, and their **source-local X coordinates may have opposite signs** because of the yaw correction. All fresh candidates should initially be unchecked. If a preexisting record is shown, note its path/timestamp; do not assume it was created in the current session. Do not save until the visible locations are correct.
 
+
+
+## Interactive marker QA and local preview reload (2026-11-17)
+
+User accepted four candidate hardpoints but reported the earlier editor was difficult to use: all markers looked alike and selection/movement was ambiguous. The first UX improvement now assigns **fixed, type-specific candidate IDs and colors** (cyan engine, red port, green starboard, gold forward inspection). The currently selected marker renders larger and its label is shown in a persistent **Moving:** line. Click a colored 3D marker to select it, then click the hull to move *that* candidate; row buttons also clearly show Select/Selected and their matching colors. Approval remains separate from selection and is only **in-memory** until **Save Reviewed Hardpoints** succeeds.
+
+The top project toolbar also has **Reload UI**. This refreshes the desktop/web UI without stopping and recompiling the native Tauri Rust backend. It should not be mistaken for a full backend rebuild or a source-control pull. A full in-app dev rebuild/relaunch comparable to Song Harbor remains a follow-up task; avoid promising it is implemented by the UI reload alone.
+
+Important integration: Saving hardpoints in a linked local project is not a Git upload. TWS-Video now has an explicit local importer (`scripts/import-ship-hardpoints.bat`) which selects approved Guard engine and port/starboard positions from this manifest and transforms them for the Godot model. See the TWS-Video README. Do not push source models to a public repo. The private asset publication tool will eventually live in Asset Forge, with separate review, commit, and publish actions.
