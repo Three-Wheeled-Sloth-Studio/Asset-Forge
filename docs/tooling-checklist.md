@@ -21,6 +21,19 @@ but the tools need selectable input/output paths and reusable manifests.
 - [ ] Add optional Blender automation to bake approved transforms into generated copies.
 - [ ] Keep original source models untouched unless the user explicitly promotes generated output.
 
+## Model Structure, Segmentation, and Articulation
+
+Research and implementation plan: [model-structure-research-roadmap.md](model-structure-research-roadmap.md). This explicitly includes ComfyUI and downloadable local AI/vision/segmentation/articulation models alongside geometry-based methods.
+
+- [ ] Audit representative original and optimized Imperatus-Assets ship GLBs for connectivity, semantic separability, hierarchy, topology differences, and hardpoint coordinate compatibility.
+- [ ] Introduce a versioned, non-destructive model component hierarchy manifest with stable IDs, source revisions, and explicit coordinate transforms.
+- [ ] Propose components from GLB hierarchy, connected geometry, material/features, symmetry, and repeated shapes; support guided selection and review.
+- [ ] Add component-relative joints (pivot, axis, limits, rest pose), reversible motion previews, and mechanical templates.
+- [ ] Bind oriented hardpoints to moving components, with mirror/group operations and clearance/arc visualization.
+- [ ] Export staged articulated derivatives using configured Blender automation while preserving canonical sources.
+- [ ] Benchmark ComfyUI-based and standalone local semantic segmentation/articulation models using real ships, accuracy, manual correction time, VRAM, licensing, and reproducibility.
+- [ ] Integrate useful model proposals into the same explicit approval and audit workflow, not a separate authority.
+
 ## Generic Image Optimization
 
 - [x] Add an `Image Optimization` tool with explicit source and staging folder fields.
